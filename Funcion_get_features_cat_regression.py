@@ -6,14 +6,15 @@ Variables:
 dataframe
 target_col = Nombre de la columna target
 pvalue = Nivel de significancia (segun el ejercicio, su valor por defecto sera 0.5)
+usar_metrica: Para no hardcodearlo, me he permitido la libertad de añadir un parametro mas a la función
 
 Devuelve una lista de las columnas con relacion significativa
 """
 
-def get_features_cat_regression(dataframe, target_col, pvalue):
+def get_features_cat_regression(dataframe, target_col, pvalue, usar_metrica = False):
 
     columnas_categoricas = []
-    for columna in df.columns:
+    for columna in dataframe.columns:
        
         if columna == target_col: # Aqui identificamos columnas, omitiendo la target
             continue
@@ -29,20 +30,22 @@ def get_features_cat_regression(dataframe, target_col, pvalue):
     columnas_significativas = []
 
     for columna in columnas_categoricas:
-        temp_df = df[[columna, target_col]].dropna() #eliminamos nulos para evitar problemas
+        temp_df = dataframe[[columna, target_col]].dropna() #eliminamos nulos para evitar problemas
 
-        catergorias = temp_df[columna].unique()
-        num_categorias = len(catergorias)
+        categorias = temp_df[columna].unique()
+        num_categorias = len(categorias)
 
         if num_categorias <2: #Checkeamos que hayan suficientes categorias
             continue
         
         grupos = [temp_df[temp_df[columna] == col][target_col].values
-                  for col in catergorias]
+                  for col in categorias]
         grupos = [g for g in grupos if len(g) >= 2]
 
+        if len(grupos) < 2:
+            continue
+
         try:
-            usar_metrica = False
             if  num_categorias == 2:
                 if usar_metrica:
                     estadistica, p_val = stats.ttest_ind(grupos[0], grupos[1])
@@ -57,6 +60,7 @@ def get_features_cat_regression(dataframe, target_col, pvalue):
             if p_val < pvalue:
                 columnas_significativas.append(columna) #Pasamos por el t de student y mannwhitney pero en el caso de este dataframe nos encontraremos que hay mas de dos categorias, por tanto no son validos, hay que usar otros
         except Exception as e:
+            print(f"Error procesado columna ´{columna}; {e}")
             continue
     return columnas_significativas
 
@@ -67,4 +71,4 @@ def get_features_cat_regression(dataframe, target_col, pvalue):
 
 resultado = get_features_cat_regression(df, "fare", 0.05)
 
-print(resultado)
+print(f"Columnas significativas: {resultado}")
