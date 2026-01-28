@@ -1,9 +1,12 @@
 
-import pandas as pd
-from scipy.stats import pearsonr
-from scipy import stats
-
 import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from scipy.stats import pearsonr
+from scipy.stats import f_oneway
+from scipy import stats
 
 def describe_df(df):
     """
@@ -22,7 +25,7 @@ def describe_df(df):
     resumen = pd.DataFrame({
         col: [
             df[col].dtype,
-            100 * df[col].isnull().mean(),
+            100 * df[col].isnull().sum() / len(df),
             df[col].nunique(),
             100 * df[col].nunique() / len(df)
         ]
@@ -33,7 +36,8 @@ def describe_df(df):
 
 def tipifica_variables(df, umbral_categoria, umbral_continua):
     """
-    Sugiere el tipo de variable para cada columna de un DataFrame según su cardinalidad.
+    Genera un Dataframe con 2 columnas: 'nombre_variable' y 'tipo_sugerido',
+    que tendrá tantas filas como variables tenga el DataFrame de entrada.
 
     Argumentos:
     df (pd.DataFrame): DataFrame de entrada.
@@ -45,6 +49,7 @@ def tipifica_variables(df, umbral_categoria, umbral_continua):
     """
     resultado = []
     n = len(df)
+    
     for col in df.columns:
         cardinalidad = df[col].nunique()
         porcentaje_card = 100 * ( cardinalidad / n )
@@ -60,7 +65,7 @@ def tipifica_variables(df, umbral_categoria, umbral_continua):
     return pd.DataFrame(resultado)
 
 def plot_features_num_regression(df, target_col="", columns=[], umbral_corr=0, pvalue=None):
-    """""
+    """
     Analiza y visualiza la relación entre variables numéricas y un target 
     mediante filtros estadísticos de correlación y significancia.
     """
@@ -121,20 +126,20 @@ def plot_features_num_regression(df, target_col="", columns=[], umbral_corr=0, p
     return selected_columns
 
 
-"""
-Esta funcion devuelve columnas categoricas con relacion significativa respecto al target
-
-Variables: 
-
-dataframe
-target_col = Nombre de la columna target
-pvalue = Nivel de significancia (segun el ejercicio, su valor por defecto sera 0.5)
-usar_metrica: Para no hardcodearlo, me he permitido la libertad de añadir un parametro mas a la función
-
-Devuelve una lista de las columnas con relacion significativa
-"""
-
 def get_features_cat_regression(dataframe, target_col, pvalue, usar_metrica = False):
+
+    """
+    Esta funcion devuelve columnas categoricas con relacion significativa respecto al target
+
+    Variables: 
+
+    dataframe
+    target_col = Nombre de la columna target
+    pvalue = Nivel de significancia (segun el ejercicio, su valor por defecto sera 0.5)
+    usar_metrica: Para no hardcodearlo, me he permitido la libertad de añadir un parametro mas a la función
+
+    Devuelve una lista de las columnas con relacion significativa
+    """
 
     columnas_categoricas = []
     for columna in dataframe.columns:
@@ -187,23 +192,36 @@ def get_features_cat_regression(dataframe, target_col, pvalue, usar_metrica = Fa
             continue
     return columnas_significativas
 
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy.stats import f_oneway
 
 def plot_features_cat_regression(df, target_col="", columns=[], pvalue=0.05, with_individual_plot=False):
+    
+    """
+    Genera un resumen del DataFrame con información relevante para cada columna.
+
+    Argumentos:
+    df (pd.DataFrame): DataFrame de entrada.
+    target_col (str): Nombre de la columna objetivo con valor por defecto "".
+    columns (list): Lista de nombres de columnas categóricas a analizar. 
+    Si está vacía, se analizarán todas las columnas categóricas excepto la columna objetivo.
+    pvalue (float): pvalue con valor por defecto 0.05 
+    with_individual_plot (bool): Si es True, genera gráficos individuales para cada categoría.
+
+    Retorna:
+    Una lista de las columnas categóricas cuyo test derelación con el target es significativo.
+    """
+    
     # Validaciones de entrada
     if not isinstance(df, pd.DataFrame):
-        print("El argumento 'df' debe ser un DataFrame de pandas.")
+        print("Dataframe no válido.")
         return None
     if not isinstance(target_col, str) or target_col == "" or target_col not in df.columns:
-        print("Debe indicar una columna objetivo válida en 'target_col'.")
+        print("target_col no válido o no existe en el DataFrame.")
         return None
     if not np.issubdtype(df[target_col].dtype, np.number):
         print("'target_col' debe ser una columna numérica.")
         return None
     if not isinstance(columns, list):
-        print("El argumento 'columns' debe ser una lista de strings.")
+        print("'columns' debe ser una lista de strings.")
         return None
     if not isinstance(pvalue, (float, int)) or not (0 < pvalue < 1):
         print("'pvalue' debe ser un número entre 0 y 1.")
@@ -227,26 +245,50 @@ def plot_features_cat_regression(df, target_col="", columns=[], pvalue=0.05, wit
         # Comprobar que la columna es categórica
         if not (df[col].dtype == "object" or str(df[col].dtype).startswith("category")):
             continue
-        # ANOVA: comparar medias de target_col entre grupos de col
-        grupos = [df[df[col] == cat][target_col].dropna() for cat in df[col].dropna().unique()]
+
+        temp_df = df[[col, target_col]].dropna() #eliminamos nulos para evitar problemas    
+
+        categorias = df[col].dropna().unique()
+        num_categorias = len(categorias)
+
+        if num_categorias <2: #Checkeamos que hayan suficientes categorias
+            continue
+
+        grupos = [temp_df[temp_df[col] == cat][target_col].values
+                  for cat in categorias]
+        grupos = [g for g in grupos if len(g) >= 2]
+
         if len(grupos) < 2:
             continue
+
         try:
-            stat, p = f_oneway(*grupos)
-        except Exception:
+            if  num_categorias == 2:                
+                estadistica, p_val1 = stats.ttest_ind(grupos[0], grupos[1])
+                #estadistica, p_val2 = stats.mannwhitneyu(grupos[0], grupos[1], alternative= "two-sided")
+            else:
+                estadistica, p_val1 = stats.f_oneway(*grupos) 
+                #estadistica, p_val2 = stats.kruskal(*grupos)
+
+            if p_val1 < pvalue:# or p_val2 < pvalue:
+
+                selected_cols.append(col)
+
+                plt.figure(figsize=(8,4))
+                sns.histplot(data=df, x=target_col, hue=col, element="step", stat="density", common_norm=False)
+                plt.title(f"Histograma de {target_col} por {col} (p={p_val1:.3g})")
+                plt.show()
+
+                if with_individual_plot:
+                    for cat in categorias:
+                        plt.figure(figsize=(6,3))
+                        sns.histplot(df[df[col]==cat][target_col], kde=True)
+                        plt.title(f"{target_col} para {col} = {cat}")
+                        plt.show()
+                
+        except Exception as e:
+            print(f"Error procesado columna {col}; {e}")
             continue
-        if p < pvalue:
-            selected_cols.append(col)
-            plt.figure(figsize=(8,4))
-            sns.histplot(data=df, x=target_col, hue=col, element="step", stat="density", common_norm=False)
-            plt.title(f"Histograma de {target_col} por {col} (p={p:.3g})")
-            plt.show()
-            if with_individual_plot:
-                for cat in df[col].dropna().unique():
-                    plt.figure(figsize=(6,3))
-                    sns.histplot(df[df[col]==cat][target_col], kde=True)
-                    plt.title(f"{target_col} para {col} = {cat}")
-                    plt.show()
+
     if not selected_cols:
         print("No se encontraron columnas categóricas relacionadas con el target para el nivel de significación indicado.")
     return selected_cols
