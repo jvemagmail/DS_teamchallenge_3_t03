@@ -207,7 +207,7 @@ def plot_features_cat_regression(df, target_col="", columns=[], pvalue=0.05, wit
     with_individual_plot (bool): Si es True, genera gráficos individuales para cada categoría.
 
     Retorna:
-    Una lista de las columnas categóricas cuyo test derelación con el target es significativo.
+    Una lista de las columnas categóricas cuyo test de relación con el target es significativo.
     """
     
     # Validaciones de entrada
